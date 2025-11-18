@@ -2,9 +2,9 @@ os.loadAPI("flex.lua")
 os.loadAPI("dig.lua")
 
 -- Initialize peripherals
-local geoScanner = peripheral.find("geoScanner")
+local geoScanner = peripheral.find("geoExplorer")
 if not geoScanner then
-    print("No Geo Scanner found!")
+    print("No Geo Explorer found!")
     return
 end
 
