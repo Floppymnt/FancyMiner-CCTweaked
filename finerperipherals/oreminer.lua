@@ -1,4 +1,4 @@
--- Advanced Peripherals Ore Miner
+-- Finer Peripherals Ore Miner
 -- Uses Geo Scanner to detect and mine specific ores
 os.loadAPI("flex.lua")
 os.loadAPI("dig.lua")
@@ -91,9 +91,9 @@ local function loadConfig()
 end
 
 -- Initialize peripherals
-local geoScanner = peripheral.find("geoScanner")
+local geoScanner = peripheral.find("geoExplorer")
 if not geoScanner then
-    flex.send("No Geo Scanner found!", colors.red)
+    flex.send("No Geo Explorer found!", colors.red)
     return
 end
 
