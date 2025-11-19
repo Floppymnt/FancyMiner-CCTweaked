@@ -11,6 +11,7 @@ local TORCH_SLOT = 2
 local BLOCK_SLOT = 3
 local DEFAULT_MAX_DISTANCE = 100
 local DEFAULT_MIN_ORES = 32
+local modem_channel = 6464 -- Added modem_channel variable
 -- Add protected block types
 local PROTECTED_BLOCKS = {
     "minecraft:chest",
@@ -130,6 +131,219 @@ end
 local oresFound = 0
 local distanceTraveled = 0
 local blocksDug = 0
+
+-- transmition functions
+if fs.exists(options_file) then
+ local file = fs.open("flex_options.cfg", "r")
+ local line = file.readLine()
+ while line ~= nil do
+  if string.find(line, "modem_channel=") == 1 then
+   modem_channel = tonumber( string.sub(
+         line, 15, string.len(line) ) )
+   break
+  end --if
+  line = file.readLine()
+ end --while
+ file.close()
+end --if
+-- Add debug prints around modem initialization
+print("DEBUG: Attempting to initialize modem.")
+local modem -- Make sure modem is declared here, outside of any function
+local hasModem = false
+local p = flex.getPeripheral("modem")
+if #p > 0 then
+    print("DEBUG: Modem peripheral found: " .. tostring(p[1]))
+    hasModem = true
+    modem = peripheral.wrap(p[1])
+    -- No need to open modem if only using modem.transmit for broadcast on a specific channel
+    print("DEBUG: Modem peripheral wrapped. Will attempt to transmit status on channel 6465.")
+else
+    print("DEBUG: No modem peripheral found during initialization. Status updates disabled.")
+    -- The script can still run without a modem, but status updates won't work.
+end
+
+-- Add this function to gather and send status (DEFINED OUTSIDE any function)
+local function sendStatus()
+    -- Gather status data
+    -- total_quarry_blocks is calculated once after initial descent
+
+    local current_processed_blocks = dig.getBlocksProcessed() or 0
+    local estimated_remaining_blocks = total_quarry_blocks - current_processed_blocks
+
+    local estimated_time_remaining_seconds = -1 -- Default to -1 if cannot calculate
+    local estimated_completion_time_str = "Calculating..."
+    local estimated_time_remaining_duration_str = "Calculating..." -- Added: for remaining duration
+
+    -- Calculate Estimated Time Remaining and Completion Time if we have enough info and a valid speed
+    if type(estimated_remaining_blocks) == 'number' and estimated_remaining_blocks > 0 and type(avg_blocks_per_second) == 'number' and avg_blocks_per_second > 0 then
+        estimated_time_remaining_seconds = estimated_remaining_blocks / avg_blocks_per_second
+
+        -- Format the completion time using the local timezone
+        local current_local_epoch_time_sec = (os.epoch("local") or 0) / 1000 -- Get current local time in seconds
+        local estimated_completion_time_sec = current_local_epoch_time_sec + estimated_time_remaining_seconds
+        estimated_completion_time_str = os.date("%Y-%m-%d %H:%M:%S", estimated_completion_time_sec)
+
+        -- Format the remaining duration as MM:SS
+        local minutes = math.floor(estimated_time_remaining_seconds / 60)
+        local seconds = math.floor(estimated_time_remaining_seconds % 60)
+        estimated_time_remaining_duration_str = string.format("%02d:%02d", minutes, seconds)
+
+    elseif total_quarry_blocks > 0 and estimated_remaining_blocks <= 0 then
+        estimated_completion_time_str = "Completed" -- Indicate if digging is theoretically done
+        estimated_time_remaining_duration_str = "00:00" -- Duration is zero when completed
+    end
+
+
+    -- Get inventory summary (basic example)
+    local inventory_summary = {}
+    for slot = 1, 16 do
+        local item = turtle.getItemDetail(slot)
+        if item then
+            table.insert(inventory_summary, { name = item.name, count = item.count })
+        end
+    end
+    -- Infer mining state; assumes mining when not stuck
+    local is_mining_status = not dig.isStuck()
+
+
+    local status_message = {
+        type = "status_update", -- Indicate this is a status update
+        id = os.getComputerID(), -- Include turtle ID
+        label = os.getComputerLabel(), -- Include turtle label
+        fuel = turtle.getFuelLevel(),
+        position = { x = dig.getx(), y = dig.gety(), z = dig.getz(), r = dig.getr() },
+        is_mining = is_mining_status, -- Reflect actual mining state
+        estimated_completion_time = estimated_completion_time_str, -- Estimated completion date and time
+        estimated_time_remaining = estimated_time_remaining_duration_str, -- Added: Estimated time remaining duration (MM:SS)
+        total_quarry_blocks = total_quarry_blocks, -- Send total blocks for context
+        dug_blocks = dig.getdug() or 0, -- Still send dug blocks, handle nil
+        processed_blocks = current_processed_blocks, -- Send processed blocks for context
+        ymin = ymin, -- Add ymin (minimum Y planned) to the status message
+        inventory_summary = inventory_summary -- Include basic inventory summary
+    }
+
+    -- Send the status message on a specific channel
+    local status_channel = modem_channel -- Channel for status updates
+    if modem then -- Check if modem peripheral is available
+        -- print("DEBUG: Attempting to transmit status on channel " .. status_channel) -- NEW DEBUG PRINT before transmit
+        -- Transmit from modem_channel to status_channel for a broadcast
+        modem.transmit(modem_channel, status_channel, status_message)
+        -- print("DEBUG: Status update sent on channel " .. status_channel) -- Optional debug
+    else
+        -- print("DEBUG: sendStatus called but modem is nil. Cannot transmit.") -- NEW DEBUG PRINT if modem is nil
+    end
+end
+
+-- checkProgress function (MODIFIED to call sendStatus and implement speed learning)
+local function checkProgress()
+    -- Print detailed progress information (keep this for console)
+    term.setCursorPos(1,1)
+    term.clearLine()
+    flex.printColors("Pos: X="..tostring(dig.getx())..
+                     ", Y="..tostring(dig.gety())..
+                     ", Z="..tostring(dig.getz())..
+                     ", Rot="..tostring(dig.getr()%360), colors.white)
+
+    term.setCursorPos(1,2)
+    term.clearLine()
+    flex.printColors("Fuel: "..tostring(turtle.getFuelLevel()), colors.orange)
+
+    term.setCursorPos(1,3)
+    term.clearLine()
+    flex.printColors("Dug: "..tostring(dig.getdug() or 0).." blocks", colors.lightBlue) -- Handle nil
+
+    term.setCursorPos(1,4)
+    term.clearLine()
+    flex.printColors("Depth: "..tostring(-dig.gety()).."m / "..tostring(-ymin).."m", colors.green)
+
+    -- Speed Learning Logic
+    -- Use processed blocks for speed calculation base
+    local current_processed_blocks = dig.getBlocksProcessed() or 0
+    -- Only update if blocks were actually processed since the last check
+    if current_processed_blocks > processed_at_last_check then
+        local blocks_processed_this_check = current_processed_blocks - processed_at_last_check
+        blocks_since_last_speed_check = blocks_since_last_speed_check + blocks_processed_this_check
+
+        -- Check if threshold is met for speed recalculation
+        if blocks_since_last_speed_check >= speed_check_threshold then
+            local current_epoch_time_ms = os.epoch("local") or 0
+            local time_elapsed_ms = current_epoch_time_ms - time_of_last_speed_check
+
+            -- Avoid division by zero or very small times
+            if type(time_elapsed_ms) == 'number' and time_elapsed_ms > 0 then
+                local current_period_bps = blocks_since_last_speed_check / (time_elapsed_ms / 1000) -- Calculate speed for this period in blocks per second
+                -- Check against math.huge and -math.huge as values, AND check for NaN using self-comparison
+                 if type(current_period_bps) == 'number' and current_period_bps ~= math.huge and current_period_bps ~= -math.huge and current_period_bps == current_period_bps then -- **CORRECTED: Replaced not math.nan() with self-comparison**
+                     -- Simple averaging: average the new rate with the existing average
+                     avg_blocks_per_second = (avg_blocks_per_second + current_period_bps) / 2
+                 else
+                      print("DEBUG: current_period_bps is not a valid number for averaging (NaN, +Inf, or -Inf). Value: " .. tostring(current_period_bps)) -- Added debug print
+                 end
+            else
+                -- If no time has elapsed or time is invalid, do not calculate or update speed for this period.
+                 print("DEBUG: Skipping speed calculation due to zero or invalid time_elapsed_ms (" .. tostring(time_elapsed_ms) .. ").") -- Added debug print
+            end
+
+
+            -- Reset for the next speed check period
+            blocks_since_last_speed_check = 0
+            time_of_last_speed_check = current_epoch_time_ms -- Start next period timer from now
+
+        end
+    end
+    -- Update processed_at_last_check for the next checkProgress call
+    processed_at_last_check = current_processed_blocks
+
+
+    -- Calculate Estimated Time Remaining in Seconds
+    local estimated_time_remaining_seconds = -1 -- Default to -1 if cannot calculate
+    -- Use processed blocks for ETA base
+    local remaining_blocks_for_eta = total_quarry_blocks - current_processed_blocks
+
+    if type(remaining_blocks_for_eta) == 'number' and remaining_blocks_for_eta > 0 and type(avg_blocks_per_second) == 'number' and avg_blocks_per_second > 0 then
+        estimated_time_remaining_seconds = remaining_blocks_for_eta / avg_blocks_per_second
+    end
+
+    -- Format Estimated Time Remaining as MM:SS for local display
+    local eta_display_str = "Calculating..."
+    if type(estimated_time_remaining_seconds) == 'number' and estimated_time_remaining_seconds >= 0 then
+        local minutes = math.floor(estimated_time_remaining_seconds / 60)
+        local seconds = math.floor(estimated_time_remaining_seconds % 60)
+        eta_display_str = string.format("%02d:%02d", minutes, seconds)
+        if estimated_time_remaining_seconds == 0 then
+            eta_display_str = "Done"
+        end
+    end
+
+    -- Display ETA on local console
+    term.setCursorPos(1,5) -- Example line, adjust as needed
+    term.clearLine()
+    flex.printColors("ETA: "..eta_display_str, colors.yellow) -- Use yellow for ETA
+
+
+    -- Use os.epoch("utc") for timing comparison in milliseconds for status *sending*
+    local current_epoch_time_ms_utc = os.epoch("utc") or 0 -- Get current epoch time in milliseconds (UTC for sending interval)
+    local time_difference_ms = current_epoch_time_ms_utc - (last_status_sent_time or 0) -- Calculate difference in milliseconds
+
+    -- print("DEBUG: Status check timing (Epoch UTC) - os.epoch(): "..tostring(current_epoch_time_ms_utc)..", last_status_sent_time: "..tostring(last_status_sent_time)..", difference: "..tostring(time_difference_ms)..", interval (ms): "..tostring(status_send_interval))
+
+    -- Send status update periodically using os.epoch() for the check
+    if type(current_epoch_time_ms_utc) == 'number' and time_difference_ms >= status_send_interval then
+        -- print("DEBUG: Status send interval met (Epoch UTC). Calling sendStatus.")
+        sendStatus()
+        last_status_sent_time = current_epoch_time_ms_utc -- Update last sent time using epoch time in milliseconds
+    -- else
+        -- print("DEBUG: Status send interval not met (Epoch UTC).")
+    end
+
+    -- Update dug and ydeep for the next checkProgress call
+    dug = dig.getdug() or 0 -- Corrected to get current dug value, handle nil
+    ydeep = dig.gety() or 0 -- Update ydeep, handle nil
+
+    -- checkReceivedCommand() -- Remove this if not doing remote control
+end --function checkProgress()
+
+
 
 -- Function to check and refuel from chest above start
 local function refuelFromChest()
