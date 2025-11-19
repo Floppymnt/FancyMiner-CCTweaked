@@ -168,35 +168,6 @@ end
 -- Add this function to gather and send status (DEFINED OUTSIDE any function)
 local function sendStatus()
     -- Gather status data
-    -- total_quarry_blocks is calculated once after initial descent
-
-    local current_processed_blocks = dig.getBlocksProcessed() or 0
-    local estimated_remaining_blocks = total_quarry_blocks - current_processed_blocks
-
-    local estimated_time_remaining_seconds = -1 -- Default to -1 if cannot calculate
-    local estimated_completion_time_str = "Calculating..."
-    local estimated_time_remaining_duration_str = "Calculating..." -- Added: for remaining duration
-
-    -- Calculate Estimated Time Remaining and Completion Time if we have enough info and a valid speed
-    if type(estimated_remaining_blocks) == 'number' and estimated_remaining_blocks > 0 and type(avg_blocks_per_second) == 'number' and avg_blocks_per_second > 0 then
-        estimated_time_remaining_seconds = estimated_remaining_blocks / avg_blocks_per_second
-
-        -- Format the completion time using the local timezone
-        local current_local_epoch_time_sec = (os.epoch("local") or 0) / 1000 -- Get current local time in seconds
-        local estimated_completion_time_sec = current_local_epoch_time_sec + estimated_time_remaining_seconds
-        estimated_completion_time_str = os.date("%Y-%m-%d %H:%M:%S", estimated_completion_time_sec)
-
-        -- Format the remaining duration as MM:SS
-        local minutes = math.floor(estimated_time_remaining_seconds / 60)
-        local seconds = math.floor(estimated_time_remaining_seconds % 60)
-        estimated_time_remaining_duration_str = string.format("%02d:%02d", minutes, seconds)
-
-    elseif total_quarry_blocks > 0 and estimated_remaining_blocks <= 0 then
-        estimated_completion_time_str = "Completed" -- Indicate if digging is theoretically done
-        estimated_time_remaining_duration_str = "00:00" -- Duration is zero when completed
-    end
-
-
     -- Get inventory summary (basic example)
     local inventory_summary = {}
     for slot = 1, 16 do
@@ -216,12 +187,7 @@ local function sendStatus()
         fuel = turtle.getFuelLevel(),
         position = { x = dig.getx(), y = dig.gety(), z = dig.getz(), r = dig.getr() },
         is_mining = is_mining_status, -- Reflect actual mining state
-        estimated_completion_time = estimated_completion_time_str, -- Estimated completion date and time
-        estimated_time_remaining = estimated_time_remaining_duration_str, -- Added: Estimated time remaining duration (MM:SS)
-        total_quarry_blocks = total_quarry_blocks, -- Send total blocks for context
         dug_blocks = dig.getdug() or 0, -- Still send dug blocks, handle nil
-        processed_blocks = current_processed_blocks, -- Send processed blocks for context
-        ymin = ymin, -- Add ymin (minimum Y planned) to the status message
         inventory_summary = inventory_summary -- Include basic inventory summary
     }
 
@@ -258,7 +224,7 @@ local function checkProgress()
     flex.printColors("Dug: "..tostring(dig.getdug() or 0).." blocks", colors.lightBlue) -- Handle nil
 
     term.setCursorPos(1,4)
-    flex.sendStatus() -- Call the new sendStatus function to transmit status update
+    sendStatus() -- Call the new sendStatus function to transmit status update
 
 end --function checkProgress()
 
