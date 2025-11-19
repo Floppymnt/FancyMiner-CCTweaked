@@ -131,6 +131,8 @@ end
 local oresFound = 0
 local distanceTraveled = 0
 local blocksDug = 0
+-- Track last dug count when we last called checkProgress()
+local last_dug_progress = dig.getdug() or 0
 
 -- transmition functions
 if fs.exists(options_file) then
@@ -699,6 +701,12 @@ local function mineOreVein()
         -- Scan for new connected ores
         scanForOres()
         saveState()
+        -- After vein mining actions, call checkProgress() when total broken blocks crosses multiples of 9
+        local current_dug = dig.getdug() or 0
+        if math.floor(current_dug / 9) > math.floor(last_dug_progress / 9) then
+            checkProgress()
+        end
+        last_dug_progress = current_dug
     end
 end
 
@@ -726,6 +734,12 @@ for i = 1, 4 do
             r = dig.getr()
         }
         saveState()
+        -- Call checkProgress() each time total broken blocks crosses a multiple of 9
+        local current_dug = dig.getdug() or 0
+        if math.floor(current_dug / 9) > math.floor(last_dug_progress / 9) then
+            checkProgress()
+        end
+        last_dug_progress = current_dug
     end
 end
 
@@ -754,6 +768,12 @@ while state.distanceTraveled < config.max_distance and state.oresFound < config.
             r = dig.getr()
         }
         saveState()
+        -- Call checkProgress() each time total broken blocks crosses a multiple of 9
+        local current_dug = dig.getdug() or 0
+        if math.floor(current_dug / 9) > math.floor(last_dug_progress / 9) then
+            checkProgress()
+        end
+        last_dug_progress = current_dug
     end
     
     -- Scan for ores after moving
