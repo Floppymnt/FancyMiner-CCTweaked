@@ -1,5 +1,5 @@
 -- remove two files
-local filesToRemove = { "oreminer.lua", "oreminer_state.lua" }
+local filesToRemove = { "oreminer.lua", "oreminer_state.dat" }
 
 for _, file in ipairs(filesToRemove) do
     if fs.exists(file) then
