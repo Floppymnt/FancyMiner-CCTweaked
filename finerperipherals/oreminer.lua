@@ -4,6 +4,7 @@ os.loadAPI("flex.lua")
 os.loadAPI("dig.lua")
 
 -- Configuration
+local options_file = "flex_options.cfg" -- Added options_file variable
 local CONFIG_FILE = "oremine.cfg"
 local MAX_SCAN_RADIUS = 8
 local FUEL_SLOT = 1
@@ -255,8 +256,7 @@ local function checkProgress()
     flex.printColors("Dug: "..tostring(dig.getdug() or 0).." blocks", colors.lightBlue) -- Handle nil
 
     term.setCursorPos(1,4)
-    term.clearLine()
-    flex.printColors("Depth: "..tostring(-dig.gety()).."m / "..tostring(-ymin).."m", colors.green)
+
 
     -- Speed Learning Logic
     -- Use processed blocks for speed calculation base
