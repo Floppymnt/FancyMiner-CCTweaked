@@ -240,6 +240,7 @@ end
 -- checkProgress function (MODIFIED to call sendStatus and implement speed learning)
 local function checkProgress()
     -- Print detailed progress information (keep this for console)
+    term.clear()
     term.setCursorPos(1,1)
     term.clearLine()
     flex.printColors("Pos: X="..tostring(dig.getx())..
@@ -250,13 +251,14 @@ local function checkProgress()
     term.setCursorPos(1,2)
     term.clearLine()
     flex.printColors("Fuel: "..tostring(turtle.getFuelLevel()), colors.orange)
+    
 
     term.setCursorPos(1,3)
     term.clearLine()
     flex.printColors("Dug: "..tostring(dig.getdug() or 0).." blocks", colors.lightBlue) -- Handle nil
 
     term.setCursorPos(1,4)
-
+    flex.sendStatus() -- Call the new sendStatus function to transmit status update
 
 end --function checkProgress()
 
@@ -267,6 +269,7 @@ local function refuelFromChest()
     local currentPos = {x = dig.getx(), y = dig.gety(), z = dig.getz()}
     
     -- Return to start
+    flex.printColors("Returning for fuel...", colors.yellow)
     dig.goto(0, 0, 0, 0)
     
     -- Get fuel from chest above
