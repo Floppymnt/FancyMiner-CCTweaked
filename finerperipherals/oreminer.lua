@@ -258,27 +258,6 @@ local function checkProgress()
     term.setCursorPos(1,4)
 
 
-
-    -- Use os.epoch("utc") for timing comparison in milliseconds for status *sending*
-    local current_epoch_time_ms_utc = os.epoch("utc") or 0 -- Get current epoch time in milliseconds (UTC for sending interval)
-    local time_difference_ms = current_epoch_time_ms_utc - (last_status_sent_time or 0) -- Calculate difference in milliseconds
-
-    -- print("DEBUG: Status check timing (Epoch UTC) - os.epoch(): "..tostring(current_epoch_time_ms_utc)..", last_status_sent_time: "..tostring(last_status_sent_time)..", difference: "..tostring(time_difference_ms)..", interval (ms): "..tostring(status_send_interval))
-
-    -- Send status update periodically using os.epoch() for the check
-    if type(current_epoch_time_ms_utc) == 'number' and time_difference_ms >= status_send_interval then
-        -- print("DEBUG: Status send interval met (Epoch UTC). Calling sendStatus.")
-        sendStatus()
-        last_status_sent_time = current_epoch_time_ms_utc -- Update last sent time using epoch time in milliseconds
-    -- else
-        -- print("DEBUG: Status send interval not met (Epoch UTC).")
-    end
-
-    -- Update dug and ydeep for the next checkProgress call
-    dug = dig.getdug() or 0 -- Corrected to get current dug value, handle nil
-    ydeep = dig.gety() or 0 -- Update ydeep, handle nil
-
-    -- checkReceivedCommand() -- Remove this if not doing remote control
 end --function checkProgress()
 
 
