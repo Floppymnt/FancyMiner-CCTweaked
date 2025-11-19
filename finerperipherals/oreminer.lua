@@ -237,7 +237,7 @@ local function sendStatus()
     end
 end
 
--- checkProgress function (MODIFIED to call sendStatus and implement speed learning)
+-- checkProgress function (MODIFIED to call sendStatus)
 local function checkProgress()
     -- Print detailed progress information (keep this for console)
     term.clear()
